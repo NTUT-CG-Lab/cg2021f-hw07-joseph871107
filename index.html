@@ -58,23 +58,103 @@
 			<input type="text" placeholder="檔名_長_寬_高" id="file-name"> 
 		</div>
 		<div>
+			<canvas id="canvas"></canvas>
+			<div class="slidecontainer">
+				<input type="range" min="0" max="0" value="0" class="slider" id="myRange">
+			</div>
+		</div>
+		<div>
 			<a 
 				class="my-btn disabled"
-				id="download-button"
+				id="download-8b-button"
 				target="_blank"
-			> 下載 RAW 檔案</a>
+			> 下載 RAW 檔案(8bit)</a>
+			<a 
+				class="my-btn disabled"
+				id="download-16b-button"
+				target="_blank"
+			> 下載 RAW 檔案(16bit)</a>
 		</div>
 		
 		
 	</div>
 
 	<script>
+		/**
+		 * 使用 Dicom2Raw 這個 class 進行轉換
+		 * 需要 new 一個實例出來
+		*/
+		var dicom2Raw;
+		var chooseBtn;
+		var filenameText;
+		var d8bBtn;
+		var d16bBtn;
+		var slider;
+		var canvas;
+
+		function _arrayBufferToBase64( buffer ) {
+			var binary = '';
+			var bytes = new Uint8Array( buffer );
+			var len = bytes.byteLength;
+			for (var i = 0; i < len; i++) {
+				binary += String.fromCharCode( bytes[ i ] );
+			}
+			return window.btoa( binary );
+		}
+
+		function displayImage(index){
+			var dicomImage = dicom2Raw.series.images[index];
+			var width = dicomImage.getCols(), height = dicomImage.getRows();
+
+			canvas.setAttribute('width', width);
+			canvas.setAttribute('height', height);
+			dicom2Raw.renderPixel(canvas, index, width, height);
+		}
+
+		function downloadBinary(arrayBuffer, filename){
+			var a = document.createElement("a");
+			var file = new Blob([arrayBuffer], {type: 'image/x-panasonic-raw'});
+			a.href = URL.createObjectURL(file);
+			a.download = filename;
+			a.click();
+		}
+
+		function processData(){
+			var size = dicom2Raw.series.images.length;
+			var mid = Math.floor(size / 2);
+
+			dicom2Raw.concatnate(() => {
+				slider.setAttribute('max', size-1);
+				slider.setAttribute('value', mid);
+				document.getElementById('info').innerText = '轉換成功';
+				displayImage(mid);
+
+				if (dicom2Raw.bitDepth8){
+					var new_element = d8bBtn.cloneNode(true);
+					d8bBtn.parentNode.replaceChild(new_element, d8bBtn);
+					d8bBtn = new_element;
+
+					d8bBtn.setAttribute('class', 'my-btn allow');
+					d8bBtn.addEventListener('click', ()=>{
+						downloadBinary(dicom2Raw.bitDepth8, `${filenameText.value}_uint8.raw`);
+					});
+				}
+
+				if (dicom2Raw.bitDepth16){
+					var new_element = d16bBtn.cloneNode(true);
+					d16bBtn.parentNode.replaceChild(new_element, d16bBtn);
+					d16bBtn = new_element;
+
+					d16bBtn.setAttribute('class', 'my-btn allow');
+					d16bBtn.addEventListener('click', ()=>{
+						downloadBinary(dicom2Raw.bitDepth16, `${filenameText.value}_uint16.raw`);
+					});
+				}
+			});
+		}
+
 		function convertRaw(){
-			/**
-			 * 使用 Dicom2Raw 這個 class 進行轉換
-			 * 需要 new 一個實例出來
-			*/
-			var dicom2Raw = new Dicom2Raw();
+			dicom2Raw = new Dicom2Raw();
 
 			/**
 			 * 選擇一個資料夾上傳
@@ -97,6 +177,7 @@
 					
 					var dimension = dicom2Raw.getDim();
 					document.getElementById('size').innerText = '尺寸: ' + dimension.x + ' x ' + dimension.y + ' x ' + dimension.z;
+					processData();
 				}
 			);
 		};
@@ -109,7 +190,12 @@
 		 * 函式庫: https://github.com/rii-mango/Daikon
 		*/
 		window.onload = function(){
-			var chooseBtn = document.getElementById('choose-dir');
+			chooseBtn = document.getElementById('choose-dir');
+			filenameText = document.getElementById('file-name');
+			d8bBtn = document.getElementById('download-8b-button');
+			d16bBtn = document.getElementById('download-16b-button');
+			slider = document.getElementById('myRange');
+			canvas = document.getElementById('canvas');
 			
 			chooseBtn.addEventListener('click', function(evt){
 				if(typeof chooseBtn.done == 'undefined'){
@@ -117,6 +203,10 @@
 				}
 				
 				convertRaw();
+			});
+			
+			slider.addEventListener('input', ()=>{
+				displayImage(slider.value);
 			});
 		
 		
@@ -142,13 +232,13 @@
 			 * 自評表 QAQ
 			 * 有做到再勾阿!!
 			*/
-			var so = new ScoreOutputer("你的學號");
+			var so = new ScoreOutputer("110598005");
 			so.installCSS(function(){
 				so.addChild("成功讀取範例程式所附的 DICOM 檔案", 6, true);
-				so.addChild("轉換 DICOM 序列為 RAW 檔案", 1, false);
-				so.addChild("成功下載轉換好的 RAW 檔案", 1, false);
-				so.addChild("可下載 8 bit 或 16 bit 的 RAW 檔案", 1, false);
-				so.addChild("在網頁中顯示中間的圖像", 1, false);
+				so.addChild("轉換 DICOM 序列為 RAW 檔案", 1, true);
+				so.addChild("成功下載轉換好的 RAW 檔案", 1, true);
+				so.addChild("可下載 8 bit 或 16 bit 的 RAW 檔案", 1, true);
+				so.addChild("在網頁中顯示中間的圖像", 1, true);
 				
 				so.renderModal(
 					document.body,
