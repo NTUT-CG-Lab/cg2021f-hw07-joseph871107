@@ -41,7 +41,7 @@
 </head>
 
 </body>
-	<script src="https://cdn.jsdelivr.net/gh/t109598105/t109598105-dicom2raw-demo@latest/Lib/dicomtoraw.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/t109598105/dicom2raw-demo@latest/Lib/dicomtoraw.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/gh/t109598105/ScoreOutputer@latest/dist/scoreoutputer.min.js"></script>
 
 	<div style="padding: 20px; margin: 10px; border-style: solid">
@@ -92,6 +92,8 @@
 		var slider;
 		var canvas;
 
+		var dataBuffer;
+
 		function _arrayBufferToBase64( buffer ) {
 			var binary = '';
 			var bytes = new Uint8Array( buffer );
@@ -108,7 +110,28 @@
 
 			canvas.setAttribute('width', width);
 			canvas.setAttribute('height', height);
-			dicom2Raw.renderPixel(canvas, index, width, height);
+
+			var ctx = canvas.getContext('2d');
+			var canvasWidth = width;
+			var canvasHeight = height;
+			ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+			var id = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+			var pixels = id.data;
+
+			for (var y=0; y<height; y++){
+				for(var x=0; x<width; x++){
+					var idx = y * width + x;
+					var value = dataBuffer[index * width * height + idx];
+					var off = idx * 4;
+					pixels[off + 0] = value;
+					pixels[off + 1] = value;
+					pixels[off + 2] = value;
+					pixels[off + 3] = 255;
+				}
+			}
+
+			ctx.putImageData(id, 0, 0);
+			// dicom2Raw.renderPixel(canvas, index, width, height);
 		}
 
 		function downloadBinary(arrayBuffer, filename){
@@ -124,30 +147,54 @@
 			var mid = Math.floor(size / 2);
 
 			dicom2Raw.concatnate(() => {
+				var u16 = new Uint16Array(dicom2Raw.rawData);
+				var u8 = new Uint8ClampedArray(u16);
+			
+				dataBuffer = u16;
+				let getMinMax = function (dataBuffer) {
+					let min = dataBuffer[0]
+					let max = dataBuffer[0]
+					for (let i = 0; i < dataBuffer.length; i++) {
+						if (dataBuffer[i] > max) {
+							max = dataBuffer[i]
+						}
+						if (dataBuffer[i] < min) {
+							min = dataBuffer[i]
+						}
+					}
+
+					return { min: min, max: max }
+				}
+				let cmpSize = getMinMax(dataBuffer)
+				let min = cmpSize.min
+				let max = cmpSize.max
+				dataBuffer = dataBuffer.map(x => (x - min) / (max - min) * 255)
+				dataBuffer = new Uint8ClampedArray(dataBuffer);
+
 				slider.setAttribute('max', size-1);
 				slider.setAttribute('value', mid);
 				document.getElementById('info').innerText = '轉換成功';
 				displayImage(mid);
 
-				if (dicom2Raw.bitDepth8){
+				if (u8){
 					var new_element = d8bBtn.cloneNode(true);
 					d8bBtn.parentNode.replaceChild(new_element, d8bBtn);
 					d8bBtn = new_element;
 
 					d8bBtn.setAttribute('class', 'my-btn allow');
 					d8bBtn.addEventListener('click', ()=>{
-						downloadBinary(dicom2Raw.bitDepth8, `${filenameText.value}_uint8.raw`);
+						downloadBinary(u8, `${filenameText.value}_uint8.raw`);
 					});
 				}
 
-				if (dicom2Raw.bitDepth16){
+				if (u16){
 					var new_element = d16bBtn.cloneNode(true);
 					d16bBtn.parentNode.replaceChild(new_element, d16bBtn);
 					d16bBtn = new_element;
 
 					d16bBtn.setAttribute('class', 'my-btn allow');
 					d16bBtn.addEventListener('click', ()=>{
-						downloadBinary(dicom2Raw.bitDepth16, `${filenameText.value}_uint16.raw`);
+						downloadBinary(u16, `${filenameText.value}_uint16.raw`);
 					});
 				}
 			});
